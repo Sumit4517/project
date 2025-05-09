@@ -1,0 +1,791 @@
+
+-------------------------------------------------S_DES---------------------------------------------------------------------------------
+
+
+
+def permute(key, perm_table):
+    return ''.join(key[i-1] for i in perm_table)
+
+def left_shift(key, n):
+    return key[n:] + key[:n]
+
+def xor(a, b):
+    return ''.join('1' if a[i] != b[i] else '0' for i in range(len(a)))
+
+def apply_sbox(s, input_bits):
+    row = int(input_bits[0] + input_bits[3], 2)
+    col = int(input_bits[1] + input_bits[2], 2)
+    return format(s[row][col], '02b')
+
+def key_generation(key):
+    p10_table = [3, 5, 2, 7, 4, 10, 1, 9, 8, 6]
+    key = permute(key, p10_table)
+
+    left = key[:5]
+    right = key[5:]
+    left = left_shift(left, 1)
+    right = left_shift(right, 1)
+
+    p8_table = [6, 3, 7, 4, 8, 5, 10, 9]
+    k1 = permute(left + right, p8_table)
+
+    left = left_shift(left, 2)
+    right = left_shift(right, 2)
+
+    k2 = permute(left + right, p8_table)
+    
+    return k1, k2
+
+def f_function(right_half, subkey):
+    ep_table = [4, 1, 2, 3, 2, 3, 4, 1]
+    expanded = permute(right_half, ep_table)
+
+    xored = xor(expanded, subkey)
+
+    s0 = [[1, 0, 3, 2], [3, 2, 1, 0], [0, 2, 1, 3], [3, 1, 3, 2]]
+    s1 = [[0, 1, 2, 3], [2, 0, 1, 3], [3, 0, 1, 0], [2, 1, 0, 3]]
+    
+    s0_output = apply_sbox(s0, xored[:4])
+    s1_output = apply_sbox(s1, xored[4:])
+
+    p4_table = [2, 4, 3, 1]
+    return permute(s0_output + s1_output, p4_table)
+
+def s_des_encrypt(plaintext, key):
+    k1, k2 = key_generation(key)
+
+    ip_table = [2, 6, 3, 1, 4, 8, 5, 7]
+    plaintext = permute(plaintext, ip_table)
+
+    left = plaintext[:4]
+    right = plaintext[4:]
+
+    new_right = xor(left, f_function(right, k1))
+    new_left = right
+
+    left = new_left
+    right = new_right
+
+    new_right = xor(left, f_function(right, k2))
+    new_left = right
+    
+    fp_table = [4, 1, 3, 5, 7, 2, 8, 6]
+    return permute(new_right + new_left, fp_table)
+
+def s_des_decrypt(ciphertext, key):
+    k1, k2 = key_generation(key)
+
+    ip_table = [2,6,3,1,4,8,5,7]
+    ciphertext = permute(ciphertext, ip_table)
+
+    left = ciphertext[:4]
+    right = ciphertext[4:]
+
+    new_right = xor(left, f_function(right, k2))
+    new_left = right
+
+    left = new_left
+    right = new_right
+
+    new_right = xor(left, f_function(right, k1))
+    new_left = right
+
+    fp_table = [4,1,3,5,7,2,8,6]
+    return permute(new_right + new_left, fp_table)
+
+def main():
+    while True:
+        choice = input("\nChoose mode:\n1. Encrypt\n2. Decrypt\n3. Exit\nChoice: ")
+        if choice == '3':
+            break
+            
+        if choice not in ['1', '2']:
+            print("Invalid choice. Try again.")
+            continue
+
+        key_input = input("Enter 10-bit binary key: ")
+        if len(key_input) != 10 or not all(bit in '01' for bit in key_input):
+            print("Invalid key. Must be 10 binary bits.")
+            continue
+
+        text_input = input("Enter 8-bit binary text: ")
+        if len(text_input) != 8 or not all(bit in '01' for bit in text_input):
+            print("Invalid text. Must be 8 binary bits.")
+            continue
+        
+        if choice == '1':
+            result = s_des_encrypt(text_input, key_input)
+            print(f"Encrypted result: {result}")
+        else:
+            result = s_des_decrypt(text_input, key_input)
+            print(f"Decrypted result: {result}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+OUTPUT
+
+
+""" Choose mode:
+1. Encrypt
+2. Decrypt
+3. Exit
+Choice: 1
+Enter 10-bit binary key: 0101010101
+Enter 8-bit binary text: 00011101
+Encrypted result: 11101110
+
+Choose mode:
+1. Encrypt
+2. Decrypt
+3. Exit
+Choice: 2
+Enter 10-bit binary key: 0000011111
+Enter 8-bit binary text: 01010101
+Decrypted result: 10000101
+
+Choose mode:
+1. Encrypt
+2. Decrypt
+3. Exit
+Choice: 3 """
+
+
+-------------------------------------------------------S-AES----------------------------------------------------------------------------
+
+
+def int_to_bin(n, bits=8):
+    return format(n, f'0{bits}b')
+
+def bin_to_int(binary):
+    return int(binary, 2)
+
+def xor(a, b):
+    return ''.join('1' if a[i] != b[i] else '0' for i in range(len(a)))
+
+def left_shift(key, n):
+    return key[n:] + key[:n]
+
+def s_box(nibble, encrypt=True):
+    s_boxes = {
+        0x0: 0x9, 0x1: 0x4, 0x2: 0xA, 0x3: 0xB,
+        0x4: 0xD, 0x5: 0x1, 0x6: 0x8, 0x7: 0x5,
+        0x8: 0x6, 0x9: 0x2, 0xA: 0x0, 0xB: 0x3,
+        0xC: 0xC, 0xD: 0xE, 0xE: 0xF, 0xF: 0x7
+    }
+    inv_s_boxes = {v:k for k, v in s_boxes.items()}
+    nibble_int = bin_to_int(nibble)
+    result_int = s_boxes[nibble_int] if encrypt else inv_s_boxes[nibble_int]
+    return format(result_int, '04b')
+
+def apply_sbox(state, encrypt=True):
+    result = ""
+    for i in range(0, len(state), 4):
+        if i + 4 <= len(state): 
+            result += s_box(state[i:i+4], encrypt)
+    return result
+
+def key_expansion(key):
+    w0 = key[:8]
+    w1 = key[8:]
+    rcon1 = '10000000'
+    rcon2 = '00110000'
+
+    temp = left_shift(w1, 4)
+    temp_sbox = s_box(temp[:4], True) + s_box(temp[4:8], True)
+    w2 = xor(w0, xor(temp_sbox, rcon1))
+    w3 = xor(w1, w2)
+
+    temp = left_shift(w3, 4)
+    temp_sbox = s_box(temp[:4], True) + s_box(temp[4:8], True)
+    w4 = xor(w2, xor(temp_sbox, rcon2))
+    w5 = xor(w3, w4)
+
+    return w0 + w1, w2 + w3, w4 + w5
+
+def mix_columns(state, encrypt=True):
+    left = state[:8]
+    right = state[8:]
+    
+    if encrypt:
+        new_left = xor(left, right)
+        new_right = left
+    else:
+        new_left = right
+        new_right = xor(left, right)
+    
+    return new_left + new_right
+
+def add_round_key(state, round_key):
+    return xor(state, round_key)
+
+def s_aes_encrypt(plaintext, key):
+    k0, k1, k2 = key_expansion(key)
+    state = add_round_key(plaintext, k0)
+    state = apply_sbox(state)
+    state = mix_columns(state)
+    state = add_round_key(state, k1)
+
+    state = apply_sbox(state)
+    state = add_round_key(state, k2)
+    
+    return state
+
+def s_aes_decrypt(ciphertext, key):
+    k0, k1, k2 = key_expansion(key)
+    state = add_round_key(ciphertext, k2)
+
+    state = apply_sbox(state, encrypt=False)
+    state = add_round_key(state, k1)
+    state = mix_columns(state, encrypt=False)
+
+    state = apply_sbox(state, encrypt=False)
+    state = add_round_key(state, k0)
+    
+    return state
+
+def main():
+    while True:
+        choice = input("\nChoose mode:\n1. Encrypt\n2. Decrypt\n3. Exit\nChoice: ")
+        if choice == '3':
+            break
+            
+        if choice not in ['1', '2']:
+            print("Invalid choice. Try again.")
+            continue
+
+        key_input = input("Enter 16-bit binary key: ")
+        if len(key_input) != 16 or not all(bit in '01' for bit in key_input):
+            print("Invalid key. Must be 16 binary bits.")
+            continue
+
+        text_input = input("Enter 16-bit binary text: ")
+        if len(text_input) != 16 or not all(bit in '01' for bit in text_input):
+            print("Invalid text. Must be 16 binary bits.")
+            continue
+        
+        if choice == '1':
+            result = s_aes_encrypt(text_input, key_input)
+            print(f"Encrypted result: {result}")
+        else:
+            result = s_aes_decrypt(text_input, key_input)
+            print(f"Decrypted result: {result}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+OUTPUT
+
+
+"""
+Choose mode:
+1. Encrypt
+2. Decrypt
+3. Exit
+Choice: 1
+Enter 16-bit binary key: 1010101010101010
+Enter 16-bit binary text: 0000000011111111
+Encrypted result: 0011111101100101
+
+Choose mode:
+1. Encrypt
+2. Decrypt
+3. Exit
+Choice: 2
+Enter 16-bit binary key: 0101011111000010
+Enter 16-bit binary text: 1010000101010101
+Decrypted result: 0001000101001001
+
+Choose mode:
+1. Encrypt
+2. Decrypt
+3. Exit
+Choice: 3
+
+"""
+
+-------------------------------------------------RSA------------------------------------------------------------------------------
+
+
+import random
+
+def gcd(a, b):
+    while b != 0:
+        a, b = b, a % b
+    return a
+
+def modinv(a, m):
+    for x in range(1, m):
+        if (a * x) % m == 1:
+            return x
+    return None
+
+def is_prime(num):
+    if num <= 1:
+        return False
+    for i in range(2, int(num**0.5)+1):
+        if num % i == 0:
+            return False
+    return True
+
+def generate_random_prime(start=100, end=300):
+    while True:
+        num = random.randint(start, end)
+        if is_prime(num):
+            return num
+
+def generate_keys():
+    p = generate_random_prime()
+    q = generate_random_prime()
+
+    while q == p:
+        q = generate_random_prime()
+
+    print(f"Randomly chosen primes:\np = {p}, q = {q}")
+
+    n = p * q
+    phi = (p - 1) * (q - 1)
+
+    e = random.randint(2, phi - 1)
+    while gcd(e, phi) != 1:
+        e = random.randint(2, phi - 1)
+
+    d = modinv(e, phi)
+
+    return ((e, n), (d, n))
+
+def encrypt(plaintext, public_key):
+    e, n = public_key
+    cipher = [(ord(char) ** e) % n for char in plaintext]
+    return cipher
+
+def decrypt(ciphertext, private_key):
+    d, n = private_key
+    plain = [chr((char ** d) % n) for char in ciphertext]
+    return ''.join(plain)
+
+def main():
+    print("RSA Encryption/Decryption with Random Keys")
+
+    public_key, private_key = generate_keys()
+    print("\nPublic Key:", public_key)
+    print("Private Key:", private_key)
+
+    message = input("\nEnter message to encrypt: ")
+    encrypted = encrypt(message, public_key)
+    print("\nEncrypted:", encrypted)
+
+    decrypted = decrypt(encrypted, private_key)
+    print("Decrypted:", decrypted)
+
+if __name__ == "__main__":
+    main()
+
+
+OUTPUT
+
+
+"""
+RSA Encryption/Decryption with Random Keys
+Randomly chosen primes:
+p = 173, q = 163
+
+Public Key: (9137, 28199)
+Private Key: (21713, 28199)
+
+Enter message to encrypt: 20
+
+Encrypted: [14142, 4395]
+Decrypted: 20
+"""
+
+
+-------------------------------------------DIFFIE-HELLMAN---------------------------------------------------------------------------
+
+
+
+
+def diffie_hellman():
+    print("=== Diffie-Hellman Key Exchange ===")
+
+    p = int(input("Enter a large prime number (p): "))
+    g = int(input("Enter a primitive root modulo p (g): "))
+
+    a = int(input("User A, enter your private key (a): "))
+    b = int(input("User B, enter your private key (b): "))
+
+    A = pow(g, a, p)  # A = g^a mod p
+    B = pow(g, b, p)  # B = g^b mod p
+
+    print(f"User A sends public key: {A}")
+    print(f"User B sends public key: {B}")
+
+    shared_key_a = pow(B, a, p)  # (B^a) mod p
+    shared_key_b = pow(A, b, p)  # (A^b) mod p
+
+    print(f"User A computes shared key: {shared_key_a}")
+    print(f"User B computes shared key: {shared_key_b}")
+
+    if shared_key_a == shared_key_b:
+        print(f"\nShared secret established successfully! Key: {shared_key_a}")
+    else:
+        print("\nError: Keys do not match.")
+
+diffie_hellman()
+
+
+
+OUTPUT
+
+"""
+
+=== Diffie-Hellman Key Exchange ===
+Enter a large prime number (p): 91
+Enter a primitive root modulo p (g): 3
+User A, enter your private key (a): 2
+User B, enter your private key (b): 5
+User A sends public key: 9
+User B sends public key: 61
+User A computes shared key: 81
+User B computes shared key: 81
+
+Shared secret established successfully! Key: 81
+"""
+
+
+==================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================
+
+
+
+
+------------------------------------------------------IMG_GENERATION---------------------------------------------------------------------
+
+
+
+# import requests
+# API_TOKEN = "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"
+# headers = {
+#     "Authorization": f"Bearer {API_TOKEN}"
+# }
+# prompt = input("Enter a description for the image you'd like to generate: ")
+# data = {
+#     "inputs": prompt
+# }
+# response = requests.post(
+#     "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+#     headers=headers, json=data
+# )
+# if response.status_code == 200:
+#     with open("generated_image.png", "wb") as f:
+#         f.write(response.content)
+#     print("Image saved as 'generated_image.png'")
+# else:
+#     print("Failed:", response.status_code)
+#     print(response.text)
+
+import requests
+import io
+from PIL import Image
+
+API_TOKEN = "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"
+headers = {
+    "Authorization": f"Bearer {API_TOKEN}"
+}
+
+prompt = input("Enter a description for the image you'd like to generate: ")
+
+# Using Stable Diffusion XL model which is known to work with the API
+API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+
+# Make the request
+response = requests.post(
+    API_URL,
+    headers=headers,
+    json={"inputs": prompt}
+)
+
+# Check if the request was successful
+if response.status_code == 200:
+    # Convert the response content to an image
+    image = Image.open(io.BytesIO(response.content))
+    # Save the image
+    image.save("generated_image.png")
+    print("Image successfully generated and saved as 'generated_image.png'")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.text)
+
+
+------------------------------------------------------AI_IMAGE_PROMT--------------------------------------------------------------------
+
+
+
+from google import genai
+
+client = genai.Client(api_key="AIzaSyA7qeUzFDzTALg3sjIaN5931nG690b5TvE") 
+idea = input("What kind of image do you want to generate?\n")
+
+# Creating a more specific prompt to generate an optimized image prompt
+prompt_engineering_request = f"""
+Create a detailed, optimized prompt for generating an AI image based on this idea: '{idea}'
+
+The prompt should:
+- Be specific about style, composition, lighting, colors, and mood
+- Include relevant technical specifications (aspect ratio, quality level)
+- Use descriptive language that AI image generators respond well to
+- Be structured in a way that prioritizes the most important elements
+- Be between 50-150 words for optimal results
+
+Just provide the final prompt without explanations.
+"""
+
+response = client.models.generate_content(
+    model="gemini-2.0-flash",
+    contents=prompt_engineering_request
+)
+
+print("\nOptimized Image Prompt:\n")
+print(response.text.strip())
+print("\nYou can now use this prompt with your preferred image generation tool.")
+
+
+
+---------------------------------------------------------------CPTION----------------------------------------------------------------
+
+
+from PIL import Image
+from transformers import BlipProcessor, BlipForConditionalGeneration
+
+def caption_image(image_path):
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+    
+    image = Image.open(image_path).convert('RGB')
+    inputs = processor(image, return_tensors="pt")
+
+    output = model.generate(**inputs, max_length=30)
+    caption = processor.decode(output[0], skip_special_tokens=True)
+    
+    return caption
+
+def main():
+    image_path = "image.jpg"
+    
+    try:
+        caption = caption_image(image_path)
+        print(f"Image: {image_path}")
+        print(f"Caption: {caption}")
+        
+        from matplotlib import pyplot as plt
+        image = Image.open(image_path)
+        plt.imshow(image)
+        plt.axis('off')
+        plt.title(caption)
+        plt.show()
+        
+    except Exception as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+----------------------------------------------------------------------------------GAN--------------------------------------------
+
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
+import numpy as np
+
+torch.manual_seed(42)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+batch_size = 64
+latent_dim = 100
+image_size = 28 * 28
+num_epochs = 50
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))
+])
+mnist_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+dataloader = DataLoader(mnist_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+class Generator(nn.Module):
+    def __init__(self):
+        super(Generator, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(latent_dim, 256),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(256),
+            
+            nn.Linear(256, 512),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(512),
+            
+            nn.Linear(512, 1024),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(1024),
+            
+            nn.Linear(1024, image_size),
+            nn.Tanh()
+        )
+    
+    def forward(self, z):
+        img = self.model(z)
+        return img.view(-1, 1, 28, 28)
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(image_size, 512),
+            nn.LeakyReLU(0.2),
+            
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
+            
+            nn.Linear(256, 1),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, img):
+        img_flat = img.view(-1, image_size)
+        validity = self.model(img_flat)
+        return validity
+generator = Generator().to(device)
+discriminator = Discriminator().to(device)
+
+optimizer_G = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
+optimizer_D = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
+
+adversarial_loss = nn.BCELoss()
+
+g_losses = []
+d_losses = []
+real_accuracies = []
+fake_accuracies = []
+for epoch in range(num_epochs):
+    epoch_g_loss = 0
+    epoch_d_loss = 0
+    epoch_real_acc = 0
+    epoch_fake_acc = 0
+    
+    for i, (real_imgs, _) in enumerate(dataloader):
+        current_batch_size = real_imgs.size(0)
+        real_imgs = real_imgs.to(device)
+        real_label = torch.ones(current_batch_size, 1).to(device)
+        fake_label = torch.zeros(current_batch_size, 1).to(device)
+
+        optimizer_G.zero_grad()
+        
+        z = torch.randn(current_batch_size, latent_dim).to(device)
+        fake_imgs = generator(z)
+
+        g_loss = adversarial_loss(discriminator(fake_imgs), real_label)
+        
+        g_loss.backward()
+        optimizer_G.step()
+        
+        optimizer_D.zero_grad()
+
+        real_preds = discriminator(real_imgs)
+        fake_preds = discriminator(fake_imgs.detach())
+
+        real_loss = adversarial_loss(real_preds, real_label)
+        fake_loss = adversarial_loss(fake_preds, fake_label)
+        d_loss = (real_loss + fake_loss) / 2
+        
+        d_loss.backward()
+        optimizer_D.step()
+
+        real_acc = ((real_preds > 0.5).float() == real_label).float().mean().item()
+        fake_acc = ((fake_preds > 0.5).float() == fake_label).float().mean().item()
+
+        epoch_g_loss += g_loss.item()
+        epoch_d_loss += d_loss.item()
+        epoch_real_acc += real_acc
+        epoch_fake_acc += fake_acc
+
+        if i % 100 == 0:
+            print(f"[Epoch {epoch}/{num_epochs}] [Batch {i}/{len(dataloader)}] "
+                  f"[D loss: {d_loss.item():.4f}] [G loss: {g_loss.item():.4f}] "
+                  f"[Real acc: {real_acc:.4f}] [Fake acc: {fake_acc:.4f}]")
+
+    epoch_g_loss /= len(dataloader)
+    epoch_d_loss /= len(dataloader)
+    epoch_real_acc /= len(dataloader)
+    epoch_fake_acc /= len(dataloader)
+
+    g_losses.append(epoch_g_loss)
+    d_losses.append(epoch_d_loss)
+    real_accuracies.append(epoch_real_acc)
+    fake_accuracies.append(epoch_fake_acc)
+
+    print(f"[Epoch {epoch}/{num_epochs}] "
+          f"[D loss: {epoch_d_loss:.4f}] [G loss: {epoch_g_loss:.4f}] "
+          f"[D real acc: {epoch_real_acc:.4f}] [D fake acc: {epoch_fake_acc:.4f}]")
+
+    if epoch % 5 == 0:
+        with torch.no_grad():
+            sample_z = torch.randn(25, latent_dim).to(device)
+            gen_imgs = generator(sample_z).cpu().detach()
+
+            fig, axs = plt.subplots(5, 5, figsize=(10, 10))
+            for ax_i, ax in enumerate(axs.flat):
+                ax.imshow(gen_imgs[ax_i, 0].numpy(), cmap='gray')
+                ax.axis('off')
+            plt.savefig(f"gan_generated_epoch_{epoch}.png")
+            plt.close()
+
+print("Training completed!")
+plt.figure(figsize=(15, 5))
+
+plt.subplot(1, 2, 1)
+plt.plot(g_losses, label='Generator Loss')
+plt.plot(d_losses, label='Discriminator Loss')
+plt.title('GAN Losses')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(real_accuracies, label='Real Accuracy')
+plt.plot(fake_accuracies, label='Fake Accuracy')
+plt.title('Discriminator Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.savefig("gan_training_metrics.png")
+plt.show()
+
+with torch.no_grad():
+    sample_z = torch.randn(16, latent_dim).to(device)
+    gen_imgs = generator(sample_z).cpu().detach()
+
+    fig, axs = plt.subplots(4, 4, figsize=(8, 8))
+    for ax_i, ax in enumerate(axs.flat):
+        ax.imshow(gen_imgs[ax_i, 0].numpy(), cmap='gray')
+        ax.axis('off')
+    plt.savefig("final_gan_generated.png")
+    plt.show()
+
+torch.save(generator.state_dict(), "gan_generator.pth")
+torch.save(discriminator.state_dict(), "gan_discriminator.pth")
+
+
+
+
+
+
+
